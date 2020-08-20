@@ -1,11 +1,10 @@
-# OVERVIEW
+### OVERVIEW
+<img src="./images/rfclock.jpg" alt="RFClock Board" width="321" height="250" align="right"/>
 
 RFClock is highly accurate time, phase and frequency synchronization platform as a stand-alone hardware solution that can be interfaced with distributed COTS SDRs.
 
-# HARDWARE
+### HARDWARE
+[RFClock schematic is in [Hardware](Hardware/schematic.pdf)
 
-RFClock schematic is in /Hardware
-
-# Implementation
-
-RFClock Implementation detail is in /Implementation
+### Implementation
+RFClock Implementation detail is in [Implementation](Implementation/RFClock_implementation.pdf)
