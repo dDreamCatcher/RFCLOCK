@@ -1,0 +1,94 @@
+RFCLOCK IMPLEMENTATION
+
+August 20, 2020
+
+1    RFCLOCK LEADER
+
+The RFClock leader design, consists of following design components; i) a reference oscillator
+(e.g 10 MHz) distributes clock signal to controller and radio elements to enable RF carrier
+formation  to  generate  synchronous  two-tone  signal,  UWB  carrier  signal,  and  system-level
+operations  (ADC-DAC  sampling),  ii)  a  RF  frequency  synthesizer  ADF4350  locks  to  refer-
+ence oscillator to produce two-tone signal at desired frequency, f₁ + f₂ that can be adjusted
+during the operation according to channel conditions,  iii) a RF power combiner and a RF
+power amplifier is used to combine two-tone signal and transmit over-the-air at a particular
+transmission power, iv) a DECAWAVE DW1000 UWB radio IC is responsible of transmis-
+sion  and  reception  of  UWB  carrier  impulse  with  recorded  timestamps,  and  v)  a  
+controller unit, nRF52832, orchestrates all operations including selection of two-tone frequency for the
+followers  to  extract  reference  clock  signal  and  coordinates  with  DW1000  for  transmission
+and reception of UWB packets to help the followers estimate and compensate for time offset.
+
+1.1     RFClock  Follower
+
+RFClock follower design consists of following design units;  i) RFClock front-end,  ii) clock-
+edge alignment, iii) PPS generation and iv) phase/time estimation.
+
+RF  front-end:  Our front-end design consists of passive components such as resistors, ca-
+pacitors and diode and hence is ultra-low power in nature with reasonably high sensitivities.
+By choosing the appropriate values for these components with envelope filter, we remove the
+quadrature signal,  ᶠ1+f2 , and leave only the amplitude of the signal.  First, we use adjustable
+impedance  matching  filter  to  tune  system  frequency  to  the  desired  frequency  to  minimize
+reflected energy in matching antenna to the trunk of the rectifier.  We use wiSpry WS1040
+digital capacitor array as tunable capacitors to implement re-configurable functionality.  The
+impedance matching network is controlled via a serial interface of main controller.  Having a
+tunable matching filter makes the system more flexible in the sense that the reference clock
+can be extracted from any two-tone signal excited at the band of interest.  Then, we use the
+4  stage  rectifier  to  design  our  envelope  detector  circuit.   The  rectifier  consists  of  
+Schottky diodes HSMS285C which have faster switching time compared to traditional diodes and the
+least possible turn-on threshold voltage.  Last, the extracted clock signal pass through band
+pass filter with center frequency at 10MHz.
+
+Clock-edge  alignment  with  PPS:  The  output  of  this  unit  is  1PPS  signal  along  with
+phase-locked  10  MHz  clock,  synchronized  across  the  entire  network  of  the  followers.   
+The extracted clock output is connected to Si5346, a low jitter frequency synthesizer from Silicon
+Lab.   The  frequency  synthesizer  feeds  STOP  input  of  TDC7200  from  Texas  Instruments.
+Another output of PLL is connected to PIC12F683 as clock input, to produce 1 PPS signal.
+The phase difference between 10 MHz and local PPS measured using TDC is used in phase
+estimation.   The  controller  orchestrates  sub-components  of  clock-edge  alignment  hardware
+using SPI. The main function applies simultaneous phase measurement to delay chain in order
+to  synchronize  clock  edges  with  global  PPS.  The  delay  chain  consist  of  cascaded  
+multiple timing  element  DS1023  that  allows  clock  signals  to  be  delayed  by  up  to  more  than  a  
+full period (i.e., 100ns).  The system is designed in a feedback loop architecture that aligns the
+clock signals by adjusting the delay element based on the output of phase/time estimation
+unit.
+
+Phase/Time  Estimation:  This  unit  consist  of  Decawave  DW1000  ultra-wideband  radio
+that is capable of time-stamping the transmission and reception of packets with a resolution
+of 15.65ps.  DW1000 is interfaced with nRF52832, cortex-M based micro-controller via SPI
+which directs the ranging process and estimates ∆TP P S.  Followed by the estimation of phase
+offset, DW1000 generates an interrupt to reset the local PPS of the follower at the SYNC pin
+of the PIC processor according to ∆φ.  DW1000 is provided with a clock signal of frequency
+38.4  MHz  and  is  upconverted  to  system  clock  frequency  given  as  125  MHz  by  clock  PLL
+(CLKPLL), an approximation to the actual system clock of 124.8MHz.  This system clock
+is further upconverted to 63.8976GHz sampling clock which is associated with ranging.  The
+timestamp  counter  operates  at  this  sampling  clock  and  increments  every  15.65ps  which  is
+an approximation to the period of this clock.  Since the hardware delay associated with the
+PPS module causes large offsets (millisecond level) between local PPS of the followers, these
+clock approximations causes cumulative errors in interrupt generation, which are estimated
+and  removed  iteratively  over  concurrent  ranging.  Additionally,  there  is  a  phase  ambiguity
+of less than 26ns between 38.4 MHz and PPS at the follower which is estimated using TDC
+and compensated during phase estimation.  Consequently, the controller sends the estimated
+phase offset to the delay chain which consist of delay line- DS1023, incrementing with a step
+size of 0.25ns, cascaded together to increase the maximum configurable delay.  Since shifting
+in time domain is equivalent to phase shift in frequency domain,  delay module adds delay
+to the clock signal depending on the 16-bit value latched by the host controller over SPI.
+
+Fabrication  and  Power  Consumption:  We implemented our design on a 4-layer FR-4
+PCB using standard commercial components.  For ease of testing and debugging, the board
+consists  of  man  output/input  ports  and  test  points.   The  final  size  of  RFClock  is  
+13cm x 7.5cm and the total weight is 35g.  It is ready to plug in any SDR radio allowing external
+clock input/PPS. We use two antenna for RF and UWB signal which are Ettus VERT900
+and  Decawave  UWB,  respectively.   Our  platform  can  use  the  UWB  permissible  channels
+spanning from 3.5GHz (with 500MHz bandwidth) to 6.5GHz.  In most of the experiments,
+we use 3.5GHz as the center frequency for improved range and reduce power consumption.
+Power  consumption  of  front-end  design  is  6.6W.  The  main  power  consuming  unit  of  the
+follower design is phase/time estimation due to radio chip.  To minimize power consumption
+of  UWB  radio,  we  use  a  preamble  length  of  128  with  highest  data  rate  of  6.81Mpbs  to
+reduce  transmission  and  reception  times.   As  a  result  of  using  this  configuration  the  
+total frame transmission time is about 180 s, and the reception time is about 215 s, respectively.
+The time spent in idle state is around 1100 us since it depends on SPI speed which is 8 MHZ
+for nRF52832. Therefore, consuming energy for one ranging operation is 0.159J, very low
+power.
+
+
+
+
