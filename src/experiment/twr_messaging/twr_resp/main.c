@@ -32,6 +32,7 @@
 #include "nrf.h"
 #include "app_error.h"
 #include <string.h>
+#include "nrf_drv_gpiote.h"
 
 #include "port_platform.h"
 #include "deca_types.h"
@@ -45,7 +46,7 @@
 //-----------------dw1000----------------------------
 
 static dwt_config_t config = {
-  5,                /* Channel number. */
+  2,                /* Channel number. */
   DWT_PRF_64M,      /* Pulse repetition frequency. */
   DWT_PLEN_128,     /* Preamble length. Used in TX only. */
   DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
@@ -66,8 +67,9 @@ static dwt_config_t config = {
 #ifdef USE_FREERTOS
   TaskHandle_t  ss_responder_task_handle;   /**< Reference to SS TWR Initiator FreeRTOS task. */
   extern void ss_responder_task_function (void * pvParameter);
-  TaskHandle_t  led_toggle_task_handle;   /**< Reference to LED0 toggling FreeRTOS task. */
-  TimerHandle_t led_toggle_timer_handle;  /**< Reference to LED1 toggling FreeRTOS timer. */
+  //TaskHandle_t  led_toggle_task_handle;   /**< Reference to LED0 toggling FreeRTOS task. */
+  //TimerHandle_t led_toggle_timer_handle;  /**< Reference to LED1 toggling FreeRTOS timer. */
+  extern void pin_event_handler(void);
 #else
   extern int ss_resp_run(void);
 #endif    // #ifdef USE_FREERTOS
@@ -79,27 +81,27 @@ static dwt_config_t config = {
   * @param[in] pvParameter   Pointer that will be used as the parameter for the task.
   */
 
-  static void led_toggle_task_function (void * pvParameter)
+ /* static void led_toggle_task_function (void * pvParameter)
   {
     UNUSED_PARAMETER(pvParameter);
     while (true)
     {
       LEDS_INVERT(BSP_LED_0_MASK);
       /* Delay a task for a given number of ticks */
-      vTaskDelay(TASK_DELAY);
+   //   vTaskDelay(TASK_DELAY);
     /* Tasks must be implemented to never return... */
-    }
-  }
+    /*}
+  }*/
 
   /**@brief The function to call when the LED1 FreeRTOS timer expires.
   *
   * @param[in] pvParameter   Pointer that will be used as the parameter for the timer.
   */
-  static void led_toggle_timer_callback (void * pvParameter)
+  /*static void led_toggle_timer_callback (void * pvParameter)
   {
     UNUSED_PARAMETER(pvParameter);
     LEDS_INVERT(BSP_LED_1_MASK);
-}
+}*/
 
 #endif  // #ifdef USE_FREERTOS
 
@@ -111,11 +113,11 @@ int main(void)
 
   #ifdef USE_FREERTOS
     /* Create task for LED0 blinking with priority set to 2 */
-    UNUSED_VARIABLE(xTaskCreate(led_toggle_task_function, "LED0", configMINIMAL_STACK_SIZE + 200, NULL, 2, &led_toggle_task_handle));
+   // UNUSED_VARIABLE(xTaskCreate(led_toggle_task_function, "LED0", configMINIMAL_STACK_SIZE + 200, NULL, 2, &led_toggle_task_handle));
 
     /* Start timer for LED1 blinking */
-    led_toggle_timer_handle = xTimerCreate( "LED1", TIMER_PERIOD, pdTRUE, NULL, led_toggle_timer_callback);
-    UNUSED_VARIABLE(xTimerStart(led_toggle_timer_handle, 0));
+    //led_toggle_timer_handle = xTimerCreate( "LED1", TIMER_PERIOD, pdTRUE, NULL, led_toggle_timer_callback);
+   // UNUSED_VARIABLE(xTimerStart(led_toggle_timer_handle, 0));
 
     /* Create task for SS TWR Initiator set to 2 */
     UNUSED_VARIABLE(xTaskCreate(ss_responder_task_function, "SSTWR_RESP", configMINIMAL_STACK_SIZE + 200, NULL, 2, &ss_responder_task_handle)); 
@@ -154,6 +156,25 @@ int main(void)
   //dwt_setpreambledetecttimeout(PRE_TIMEOUT);
 
   dwt_setrxtimeout(0);    // set to NO receive timeout for this simple example   
+
+  uint32 regval= 0x00000000;
+  dwt_write32bitoffsetreg(GPIO_CTRL_ID, GPIO_MSGP7_MASK, regval);
+
+  uint32_t err_code;
+  if(!nrf_drv_gpiote_is_init())
+  {
+    err_code = nrf_drv_gpiote_init();
+  }
+  nrf_drv_gpiote_in_config_t config = GPIOTE_CONFIG_IN_SENSE_LOTOHI(true);
+  config.pull = NRF_GPIO_PIN_PULLUP;
+  err_code = nrf_drv_gpiote_in_init(30, &config, pin_event_handler);
+  if (err_code != NRF_SUCCESS)
+  {
+    //printf("Error in initializing pin GPIO as input");
+    while(1);
+  }
+  nrf_drv_gpiote_in_event_enable(30, false);
+
 
   //-------------dw1000  ini------end---------------------------	
 
